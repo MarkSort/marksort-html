@@ -1,0 +1,77 @@
+.mark-body {
+    background-color: #dbdbdb;
+}
+
+.mark-nav {
+    background: #fff;
+}
+
+.mark-body, .mark-nav {
+    border-bottom: 1px solid #00f;
+}
+
+.mark-navbar {
+    max-width: 1300px;
+    margin: 0 auto;
+}
+
+.mark-navbar button.navbar-burger, .mark-navbar button.navbar-burger:focus {
+    background: #fff;
+    border: none;
+    color: #777;
+    outline: none;
+}
+
+@media screen and (max-width: 1087px) {
+    .mark-navbar .navbar-menu {
+        text-align: right;
+    }
+}
+
+.mark-block {
+    border-radius: 10px;
+    padding: 0 .75rem;
+    margin-bottom: 1.5rem;
+    background: #fff;
+}
+
+.mark-block-img {
+    width: 120px;
+    height: 100%;
+    background: #fff;
+    position: relative;
+}
+
+.mark-block-img img {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+}
+
+.mark-block-text {
+    max-height: 144px;
+}
+
+.mark-block-title {
+    font-weight: bold;
+}
+
+.mark-block-text p {
+    max-height: 100px;
+    overflow: hidden;
+}
+
+@media screen and (max-width: 1087px) {
+    .mark-block {
+        font-size: 66%;
+        border-radius: 6px;
+        padding: 0 .5rem;
+        margin-bottom: 1rem;
+    }
+    .mark-block-img {
+        width: 60px;
+    }
+}
