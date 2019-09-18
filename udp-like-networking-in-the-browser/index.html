@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>UDP-like Networking in the Browser - MarkSort</title>
+
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#333333">
+    <meta name="msapplication-TileColor" content="#2b5797">
+    <meta name="theme-color" content="#ffffff">
+
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css">
+
+    <link rel="stylesheet" href="/marksort.css">
+    <script defer src="/marksort.js"></script>
+  </head>
+
+  <body>
+    <div class="mark-body">
+
+      <div class="mark-nav">
+        <nav class="navbar mark-navbar" role="navigation" aria-label="main navigation">
+
+          <div class="navbar-brand">
+
+            <a class="navbar-item" href="/">
+              <img src="/images/marksort.png" alt="MarkSort" />
+            </a>
+
+            <button class="navbar-burger" aria-label="menu" aria-expanded="false">
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+            </button>
+
+          </div>
+
+          <div class="navbar-menu">
+            <div class="navbar-start">
+              <a class="navbar-item" href="/projects/">projects</a>
+              <a class="navbar-item" href="/topics/">topics</a>
+              <a class="navbar-item" href="/site-log/">site log</a>
+            </div>
+
+            <div class="navbar-end">
+              <a class="navbar-item" href="/about/">about</a>
+            </div>
+          </div>
+
+        </nav>
+      </div>
+
+      <section class="section">
+        <div class="container content mark-article">
+
+          <h1 class="title is-3">UDP-like Networking in the Browser</h1>
+          <div class="mark-article-meta">Published September 17, 2019</div>
+
+          <h2 class="title is-4">Overview</h2>
+          
+          <p>Browser based real time games that use WebSockets are forced to have ordered messages. This means that if messages have to be retransmitted the recipient can't process newer messages that have already been received until after receiving and processing the delayed messages.  With UDP-like connections, messages can be skipped when they show up late or don't show up at all. For games this means the user being able to see the most up to date game state that's been received, regardless of if some older messages have issues being delivered.</p>
+          
+          <p>To use UDP-like connections in a browser, we can use WebRTC DataChannels with <span class="mark-code">ordered: false</span> and <span class="mark-code">maxRetransmits: 0</span>. This will allow us to skip messages that arrive after newer messages, and keep messages from being needlessly resent when they will likely arrive too late anyway.</p>
+          
+          <p>WebRTC is intended to be used Peer-to-Peer, connecting users' browsers directly to each other. In order to use it in a Client-Server fashion, we’ll still have to implement the signalling that WebRTC requires for negotiating connections between peers.</p>
+          
+          <p>We’ll be using Node.js for the server, with the <a href="https://github.com/node-webrtc/node-webrtc">node-webrtc / wrtc</a> package.  However, these basic ideas should work with any server side WebRTC implementation.</p>
+          
+          <h2 class="title is-4">Signalling</h2>
+          <p>One small downside to this approach is that getting the client to connect to the server is not as simple as specifying a URL like with WebSockets. We still need a Signal Server to negotiate the connection just like any WebRTC use case.  Though in the Client-Server case, the signalling can be done through HTTP calls or WebSockets to the same server that will connect with WebRTC. The signalling is only needed to initiate the connection, and won't be used after that. We'll just use two HTTP endpoints, which are "Get Offer" and "Send Answer" described below. Normally, something like these requests would be proxied between peers, but because our server includes the signalling, we’ll react to them directly.</p>
+          
+          <p>We’re just using the core Node.js http server for signalling, but you could change this to use Express, Hapi, etc.</p>
+
+          <h2 class="title is-4">Get Offer</h2>
+          <p>To start connection negotiation, the client only needs to call this endpoint with no body and no prior setup.  The server will create a PeerConnection and an associated Offer.  Because we want to allow multiple clients, each PeerConnection will have a unique ID.  We’ll return both the Offer and ID to the client.</p>
+          
+          <p>Here is our Client code that calls the endpoint, and receives an Offer with an ID.</p>
+          
+          client.js:
+          <pre>
+function connect() {
+  fetch('/get-offer')
+    .then(function(response) {
+      return response.json()
+    })
+    .then(sendAnswer)
+}
+
+connect()</pre>
+          
+          <ul>
+            <li>
+              We’ll implement <span class="mark-code">sendAnswer()</span> later under the Send Answer section.
+            </li>
+            <li>
+              You can call <span class="mark-code">connect()</span> when responding to a button click event or however else you’d like.
+            </li>
+          </ul>
+          
+          <p>Here is the server handler that will process the request, with comments showing the 4 main steps happening here.</p>
+          
+          server.js:
+          <pre>
+const wrtc = require("wrtc")
+
+const clients = {}
+let nextClientId = 0
+
+function getOffer(req, res) {
+  // 1. Create a PeerConnection specific to this client
+  const clientId = nextId++
+  const peerConnection = new wrtc.RTCPeerConnection()
+  const client = { peerConnection }
+  clients[clientId] = client
+
+  // 2. Use the PeerConnection to create an Offer
+  peerConnection.createOffer(function(offer) {
+    // 3. Set the Offer on the PeerConnection
+    peerConnection.setLocalDescription(
+      offer,
+      function() {
+        // 4. Return the ID and Offer to the Client
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ clientId, sdp: offer.sdp }))
+      }
+    )
+  })
+}</pre>
+
+          <ul>
+            <li>
+              The <span class="mark-code">sdp</span> property of the Offer used in step 4 is all we actually need to return to the Client.
+            </li>
+            <li>
+              Because we create a new PeerConnection and Client ID for every Offer, we can have multiple Clients connected at the same time to a single Server.
+            </li>
+          </ul>
+          
+          <h2 class="title is-4">Send Answer</h2>
+          <p>Now that the Client has an Offer from the server, we create a Client PeerConnection, set the Offer, create an Answer, and send the Answer to the Server.</p>
+          
+          client.js:
+          <pre>
+function sendAnswer(offer) {
+  // 1. Create the client side PeerConnection
+  const peerConnection = new RTCPeerConnection()
+  const clientId = offer.clientId
+
+  // 2. Set the offer on the PeerConnection
+  peerConnection.setRemoteDescription(
+    { type: 'offer', sdp: offer.sdp }
+  ).then(function() {
+    // 3. Create an answer to send to the Server
+    peerConnection.createAnswer().then(function(answer) {
+      // 4. Set the answer on the PeerConnection
+      peerConnection.setLocalDescription(answer).then(function() {
+        // 5. Send the answer to the server
+        fetch('/send-answer-get-candidate', {
+          method: 'POST',
+          body: JSON.stringify({clientId, sdp: answer.sdp})
+        })
+          .then(function(response) {
+            return response.json()
+          })
+          .then(addIceCandidate)
+      })
+    })
+  })
+}</pre>
+          
+          <ul>
+            <li>
+              We return the Client ID with our Answer so the Server knows which PeerConnection to use.
+            </li>
+            <li>
+              At this point, the client is generating ICE candidates, but we’ll talk about that and implement <span class="mark-code">addIceCandidate()</span> in the next section.
+            </li>
+          </ul>
+          
+          <p>Here is the server handler for processing the client’s answer.</p>
+          
+          server.js:
+
+          <pre>
+function sendAnswerGetCandidate(req, res) {
+  // This starts with boilerplate to read the body from the request
+  let body = ''
+  req.on('readable', function() {
+    const next = req.read()
+    if (next) return body += next
+
+    const answer = JSON.parse(body)
+
+    // 1. Get the PeerConnection we started with
+    const client = clients[answer.clientId]
+    const peerConnection = client.peerConnection
+    // 2. Set the Answer on the PeerConnection
+    peerConnection.setRemoteDescription(
+      { type: 'answer', sdp: answer.sdp },
+      function() {
+        // 3. Save the response for sending the ICE Candidate
+        client.iceCandidateResponse = res
+      }
+    }
+  })
+}</pre>
+          <ul>
+            <li>
+              Now the server is also generating ICE Candidates which we’ll wait on before replying to the client.
+            </li>
+
+            <li>
+                <span class="icon has-text-info">
+                  <i class="fas fa-info-circle"></i>
+                </span>
+              The Offer/Answer part of the connection is complete, but we still need to pass at least one ICE Candidate before the Client and Server are directly connected.
+            </li>
+          </ul>
+
+          <h2 class="title is-4">ICE Candidates</h2>
+          <p>Normally with Peer-to-Peer WebRTC, both peers will send multiple ICE Candidates to the other peer through the signalling server.  These are used to attempt connections between the peers until one of them works.</p>
+
+          <p>For Client-Server, we’re assuming the Server has a public address that the Client can directly connect to.  With that in mind, we will be ignoring the Client’s ICE Candidates and only sending one of the Server’s to the Client.</p>
+
+          <p>First, we’ll implement <span class="mark-code">addIceCandidate()</span> in the client to pass the ICE Candidate to our Client PeerConnection.</p>
+
+          client.js
+          <pre>
+function addIceCandidate(candidate) {
+  // 1. This checks for the server indicating it could not provide any
+  //    ICE Candidates.
+  if (candidate.candidate === '') {
+    return console.log('the server had no ICE Candidates')
+  }
+
+  // 2. Pass the ICE Candidate to the Client PeerConnection
+  peerConnection.addIceCandidate(candidate)
+}</pre>
+          
+          <p>Next, we need to backtrack to before the Offer/Answer are set on the Server’s PeerConnection, and add a callback that is called every time an ICE Candidate is ready.</p>
+          
+          server.js
+          <pre>
+function getOffer(req, res) {
+  // ... previous code here ...
+
+  peerConnection.onicecandidate = function(event) {
+    // 1. If the client isn’t waiting for a response, either we already
+    //    sent one, or something went wrong.
+    if (!client.iceCandidateResponse) {
+      return console.log('got candidate but no response')
+    }
+
+    const candidate = event.candidate
+
+    // 2. Skip local candidates.  You can do the same for 192.168., etc.
+    if (candidate.address.startsWith('10.')) {
+      return console.log('skipping local candidate')
+    }
+
+    // 3. Skip candidates that aren't udp
+    If (candidate.protocol !== 'udp') {
+      return console.log('skipping non-udp candidate')
+    }
+
+    // 4. Send the ICE Candidate to the Client
+    client.iceCandidateResponse.end(JSON.stringify(candidate))
+    delete client.iceCandidateResponse
+  }
+}</pre>
+
+          <ul>
+            <li>
+              For step 2, you could instead filter the candidates by a specific public address you know your server has.  I haven’t tested if the <span class="mark-code">ordered</span> and <span class="mark-code">maxRetransmits</span> settings will work with a tcp connection, but seems like udp would be required, and that’s what step 3 is for.
+            </li>
+          </ul>
+
+          <p>At this point, our Client and Server should be directly connected to each other and will no longer need the signalling server!</p>
+
+          <h2 class="title is-4">DataChannel</h2>
+          <p>Setting up the DataChannel for sending messages between the Client and Server is the same as any other WebRTC setup.  Here the server will create the DataChannel and send 50 messages per second to the Client.</p>
+
+          <p>We’ll start with the Client reacting to creation of the DataChannel and messages received through it.  This code gets added to <span class="mark-code">sendAnswer()</span> where we create our Client PeerConnection.</p>
+          
+          client.js:
+          <pre>
+function sendAnswer(offer) {
+  // ... previous code here ...
+
+  peerConnection.ondatachannel(function (event) {
+    const dataChannel = event.channel
+
+    let lastMessageId = 0
+    dataChannel.onmessage = function(event) {
+      // Ideally this wouldn't be a string, but that's out of scope here.
+      const messageId = parseInt(event.data, 10)
+
+      if (messageId &lt;= lastMessageId) {
+        // This message is old. We can either skip it, or handle it
+        // differently knowing it is old.
+        return
+      }
+      if (messageId &gt; lastMessageId + 1) {
+        // Some messages before this one are late or were lost. 
+        // If this happens a lot we may want to alert the user that the
+        // connection seems unstable.
+      }
+      lastMessageId = messageId
+    }
+  })
+}</pre>
+
+          <ul>
+            <li>
+              Here you can see the benefit we’d never get with WebSockets where we can go ahead and process all received messages, even if previous messages are delayed or lost.
+            </li>
+          </ul>
+          
+          <p>Finally, we’ll have the server create the DataChannel and send the messages.</p>
+          
+          server.js:
+          <pre>
+function getOffer(req, res) {
+  // ... previous code here ...
+
+  const dataChannel = peerConnection.createDataChannel('hello', {
+    ordered: false,
+    maxRetransmits: 0
+  })
+
+  dataChannel.onopen = function(event) {
+    let messageId = 1
+    setInterval(function() {
+      dataChannel.send(messageId++)
+    }, 20)
+  }
+}</pre>
+
+          <ul>
+            <li>
+              Here we see the configuration mentioned in the overview that prevents us from having to wait on delayed or lost messages.
+            </li>
+          </ul>
+          
+          <h2 class="title is-4">All Sorted Out</h2>
+
+          <p>Now we have a server that can connect to multiple browsers and send a high rate of messages without one out more messages delaying others. The primary use case for this is multiplayer game updates, but should work for any data with a high rate that doesn't rely on message order.</p>
+          
+          <p>This is just the groundwork and you'd want to look into improvements beyond it. These are just a few ideas for what might be next:</p>
+
+          <ul>
+            <li>Connection error handling</li>
+            <li>Handle client disconnects and reconnect</li>
+            <li>Allow multiple and/or user ICE Candidates</li>
+            <li>Binary message contents</li>
+            <li>Different language for the server</li>
+          </ul>
+
+      </div>
+      </section>
+
+    </div>
+  </body>
+</html>

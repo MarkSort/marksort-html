@@ -7,12 +7,19 @@
 
     <title>MarkSort</title>
 
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#333333">
+    <meta name="msapplication-TileColor" content="#2b5797">
+    <meta name="theme-color" content="#ffffff">
+
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css">
-    <script defer src="https://use.fontawesome.com/releases/v5.3.1/js/all.js"></script>
 
-    <link rel="stylesheet" href="marksort.css">
-    <script defer src="marksort.js"></script>
+    <link rel="stylesheet" href="/marksort.css">
+    <script defer src="/marksort.js"></script>
   </head>
 
   <body>
@@ -24,7 +31,7 @@
           <div class="navbar-brand">
 
             <a class="navbar-item" href="/">
-              <img src="marksort.png" alt="MarkSort" />
+              <img src="/images/marksort.png" alt="MarkSort" />
             </a>
 
             <button class="navbar-burger" aria-label="menu" aria-expanded="false">
@@ -39,53 +46,97 @@
             <div class="navbar-start">
               <a class="navbar-item" href="/projects/">projects</a>
               <a class="navbar-item" href="/topics/">topics</a>
-              <a class="navbar-item" href="/change-log/">change log</a>
+              <a class="navbar-item" href="/site-log">site log</a>
             </div>
 
             <div class="navbar-end">
-              <a class="navbar-item" href="/about/">about</a>
+              <a class="navbar-item" href="/about">about</a>
             </div>
           </div>
 
         </nav>
       </div>
 
-      <section class="section">
+      <section class="section mark-blocks">
         <div class="container">
 
           <div class="columns">
               <div class="column">
-                <div class="mark-block">
-                  <div class="columns is-mobile">
-                    <div class="column is-narrow">
-                      <div class="mark-block-img">
-                        <img src="bulma.png" alt="Bulma" />
+                <a href="/udp-like-networking-in-the-browser">
+                  <div class="mark-block">
+                    <div class="columns is-mobile">
+                      <div class="column is-narrow">
+                        <div class="mark-block-img">
+                          <img src="/images/blocks/webrtc.png" alt="WebRTC" />
+                        </div>
+                      </div>
+                      <div class="column mark-block-text">
+                        <div class="mark-block-title">UDP-like Networking in the Browser</div>
+                        <p>
+                          With UDP-like connections, messages can be skipped when they show up late or don't show up at all.
+                          To use UDP-like connections in a browser, we can use WebRTC DataChannels.
+                        </p>
                       </div>
                     </div>
-                    <div class="column mark-block-text">
-                      <div class="mark-block-title">Bulma</div>
-                      <p>Duis sed erat ac velit bibendum iaculis eget eu turpis. Integer sit amet ligula arcu. Aenean eu risus non lacus mollis imperdiet. Donec malesuada malesuada odio ut euismod. Fusce tincidunt eros quis ultricies elementum. </p>
-                    </div>
                   </div>
-                </div>
+                </a>
               </div>
               <div class="column">
-                <div class="mark-block">
-                  <div class="columns is-mobile">
-                    <div class="column mark-block-text">
-                      <div class="mark-block-title">Netlify</div>
-                      <p>Wam facilisis magna id risus porta porta. Suspendisse facilisis id ex sit amet pharetra. Nam aliquet nisl auctor arcu porttitor maximus. Vestibulum dignissim tellus quis mi semper consectetur. Quisque et imperdiet justo. Integer hendrerit sapien nec magna tempor, ut ullamcorper risus rhoncus. Integer vestibulum eleifend gravida. Pellentesque lacinia felis eget mi luctus finibus.</p>
-                    </div>
-                    <div class="column is-narrow">
-                      <div class="mark-block-img">
-                        <img src="netlify.png" alt="Netlify" />
+                <a href="/about">
+                  <div class="mark-block">
+                    <div class="columns is-mobile">
+                      <div class="column mark-block-text">
+                        <div class="mark-block-title">MarkSort.com</div>
+                        <p>This is a meta page about this site, technologies it uses, plans for the future, and me.</p>
+                      </div>
+                      <div class="column is-narrow">
+                        <div class="mark-block-img">
+                          <img src="/images/blocks/marksort.png" alt="MarkSort" />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </a>
               </div>
             </div>
-            
+
+            <div class="columns">
+              <div class="column">
+                <a href="/projects/">
+                  <div class="mark-block">
+                    <div class="columns is-mobile">
+                      <div class="column is-narrow">
+                        <div class="mark-block-img">
+                          <img src="/images/blocks/projects.png" alt="lego pieces" />
+                        </div>
+                      </div>
+                      <div class="column mark-block-text">
+                        <div class="mark-block-title">Projects</div>
+                        <p>There are too many projects and too little time. Some are listed here with short descriptions. This will eventually link to pages for each project with links to related content and topics.</p>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+              </div>
+              <div class="column">
+                <a href="/topics/">
+                  <div class="mark-block">
+                    <div class="columns is-mobile">
+                      <div class="column mark-block-text">
+                        <div class="mark-block-title">Topics</div>
+                        <p>Jack of all trades, master of none - Various topics that will be covered are listed here. Soon each will have a page linking to related projects and content.</p>
+                      </div>
+                      <div class="column is-narrow">
+                        <div class="mark-block-img">
+                          <img src="/images/blocks/topics.png" alt="books" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </a>
+              </div>
+            </div>
+
         </div>
       </section>
 
