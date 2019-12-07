@@ -61,7 +61,7 @@
         <div class="container content mark-article">
 
           <h1 class="title is-3">UDP-like Networking in the Browser</h1>
-          <div class="mark-article-meta">Published September 17, 2019</div>
+          <div class="mark-article-meta">Updated December 7, 2019 - Originally Published September 17, 2019</div>
 
           <h2 class="title is-4">Overview</h2>
           
@@ -72,6 +72,9 @@
           <p>WebRTC is intended to be used Peer-to-Peer, connecting users' browsers directly to each other. In order to use it in a Client-Server fashion, we’ll still have to implement the signalling that WebRTC requires for negotiating connections between peers.</p>
           
           <p>We’ll be using Node.js for the server, with the <a href="https://github.com/node-webrtc/node-webrtc">node-webrtc / wrtc</a> package.  However, these basic ideas should work with any server side WebRTC implementation.</p>
+
+          <h2 class="title is-4">Browser Support</h2>
+          <p>This approach has been tested in recent versions of Firefox, Chrome, and Safari. Edge does not currently support WebRTC DataChannels, but it <a href="https://developer.microsoft.com/en-us/microsoft-edge/platform/status/rtcdatachannels/?filter=f3f0000bf&search=rtc&q=data%20channels">seems like "Edge (Chromium)" will</a>.
           
           <h2 class="title is-4">Signalling</h2>
           <p>One small downside to this approach is that getting the client to connect to the server is not as simple as specifying a URL like with WebSockets. We still need a Signal Server to negotiate the connection just like any WebRTC use case.  Though in the Client-Server case, the signalling can be done through HTTP calls or WebSockets to the same server that will connect with WebRTC. The signalling is only needed to initiate the connection, and won't be used after that. We'll just use two HTTP endpoints, which are "Get Offer" and "Send Answer" described below. Normally, something like these requests would be proxied between peers, but because our server includes the signalling, we’ll react to them directly.</p>
@@ -81,18 +84,20 @@
           <h2 class="title is-4">Get Offer</h2>
           <p>To start connection negotiation, the client only needs to call this endpoint with no body and no prior setup.  The server will create a PeerConnection and an associated Offer.  Because we want to allow multiple clients, each PeerConnection will have a unique ID.  We’ll return both the Offer and ID to the client.</p>
           
-          <p>Here is our Client code that calls the endpoint, and receives an Offer with an ID.</p>
+          <p>Here is our Client code that calls the endpoint, and receives an Offer with an ID. You can adjust the <span class="mark-code">apiPort</span> and <span class="mark-code">baseUrl</span> if needed.</span></p>
           
           client.js:
           <pre>
+const apiPort = 8080
+const baseUrl = `${window.location.protocol}//${window.location.hostname}:${apiPort}/`
+
 function connect() {
-  fetch('/get-offer')
+  fetch(`${baseUrl}get-offer`)
     .then(function(response) {
       return response.json()
     })
     .then(sendAnswer)
 }
-
 connect()</pre>
           
           <ul>
@@ -113,25 +118,43 @@ const wrtc = require("wrtc")
 const clients = {}
 let nextClientId = 0
 
-function getOffer(req, res) {
+function getOffer(request, response) {
   // 1. Create a PeerConnection specific to this client
-  const clientId = nextId++
+  const clientId = nextClientId++
   const peerConnection = new wrtc.RTCPeerConnection()
-  const client = { peerConnection }
+
+  const client = { peerConnection, dataChannel: createDataChannel(peerConnection) }
   clients[clientId] = client
 
   // 2. Use the PeerConnection to create an Offer
-  peerConnection.createOffer(function(offer) {
-    // 3. Set the Offer on the PeerConnection
-    peerConnection.setLocalDescription(
-      offer,
-      function() {
-        // 4. Return the ID and Offer to the Client
-        res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ clientId, sdp: offer.sdp }))
-      }
-    )
-  })
+  console.log(clientId, 'creating offer')
+  peerConnection.createOffer(
+    function(offer) {
+      console.log(clientId, 'setting offer')
+      // 3. Set the Offer on the PeerConnection
+      peerConnection.setLocalDescription(
+        offer,
+        function() {
+          console.log(clientId, 'sending offer')
+          // 4. Return the ID and Offer to the Client
+          response.setHeader('content-type', 'application/json')
+          response.end(JSON.stringify({ clientId, sdp: offer.sdp }))
+        },
+        getErrorHandler(response, 'setting offer')
+      )
+    },
+    getErrorHandler(response, 'creating offer')
+  )
+
+  peerConnection.onicecandidate = getIceCandidateHandler(clientId, client)
+}
+
+function getErrorHandler(response, failedAction) {
+  return function(error) {
+    console.error(`error ${failedAction}: `, error)
+    response.statusCode = 500
+    response.end(`error ${failedAction}`)
+  }
 }</pre>
 
           <ul>
@@ -141,6 +164,9 @@ function getOffer(req, res) {
             <li>
               Because we create a new PeerConnection and Client ID for every Offer, we can have multiple Clients connected at the same time to a single Server.
             </li>
+            <li>
+              We'll implement <span class="mark-code">createDataChannel()</span> and <span class="mark-code">getIceCandidateHandler()</span> in later sections.
+            </li>
           </ul>
           
           <h2 class="title is-4">Send Answer</h2>
@@ -148,9 +174,11 @@ function getOffer(req, res) {
           
           client.js:
           <pre>
+let peerConnection
+
 function sendAnswer(offer) {
   // 1. Create the client side PeerConnection
-  const peerConnection = new RTCPeerConnection()
+  peerConnection = new RTCPeerConnection()
   const clientId = offer.clientId
 
   // 2. Set the offer on the PeerConnection
@@ -162,7 +190,7 @@ function sendAnswer(offer) {
       // 4. Set the answer on the PeerConnection
       peerConnection.setLocalDescription(answer).then(function() {
         // 5. Send the answer to the server
-        fetch('/send-answer-get-candidate', {
+        fetch(`${baseUrl}send-answer-get-candidate`, {
           method: 'POST',
           body: JSON.stringify({clientId, sdp: answer.sdp})
         })
@@ -173,6 +201,8 @@ function sendAnswer(offer) {
       })
     })
   })
+
+  setupDataChannel()
 }</pre>
           
           <ul>
@@ -180,7 +210,7 @@ function sendAnswer(offer) {
               We return the Client ID with our Answer so the Server knows which PeerConnection to use.
             </li>
             <li>
-              At this point, the client is generating ICE candidates, but we’ll talk about that and implement <span class="mark-code">addIceCandidate()</span> in the next section.
+              At this point, the client is generating ICE candidates, but we’ll talk about that and implement <span class="mark-code">addIceCandidate()</span> in the next section and <span class="mark-code">setupDataChannel()</span> after that.
             </li>
           </ul>
           
@@ -189,11 +219,11 @@ function sendAnswer(offer) {
           server.js:
 
           <pre>
-function sendAnswerGetCandidate(req, res) {
+function sendAnswerGetCandidate(request, response) {
   // This starts with boilerplate to read the body from the request
   let body = ''
-  req.on('readable', function() {
-    const next = req.read()
+  request.on('readable', function() {
+    const next = request.read()
     if (next) return body += next
 
     const answer = JSON.parse(body)
@@ -202,24 +232,32 @@ function sendAnswerGetCandidate(req, res) {
     const client = clients[answer.clientId]
     const peerConnection = client.peerConnection
     // 2. Set the Answer on the PeerConnection
+    console.log(answer.clientId, 'setting answer')
     peerConnection.setRemoteDescription(
       { type: 'answer', sdp: answer.sdp },
       function() {
-        // 3. Save the response for sending the ICE Candidate
-        client.iceCandidateResponse = res
-      }
-    }
+
+        // 3. If there is already an ICE Candidate ready, send it
+        if (client.iceCandidate) {
+          response.end(JSON.stringify(client.iceCandidate))
+          delete client.iceCandidate
+          return
+        }
+
+        // 4. Otherwise, Save the response for sending the ICE Candidate later
+        console.log(answer.clientId, 'saving response')
+        client.iceCandidateResponse = response
+      },
+      getErrorHandler(response, 'setting offer')
+    )
   })
 }</pre>
           <ul>
             <li>
-              Now the server is also generating ICE Candidates which we’ll wait on before replying to the client.
+              Now the server is also generating ICE Candidates which send to the client now if one is ready. If one is not ready yet, we'll store the request and send the ICE Candidate in the next section.
             </li>
 
             <li>
-                <span class="icon has-text-info">
-                  <i class="fas fa-info-circle"></i>
-                </span>
               The Offer/Answer part of the connection is complete, but we still need to pass at least one ICE Candidate before the Client and Server are directly connected.
             </li>
           </ul>
@@ -229,7 +267,7 @@ function sendAnswerGetCandidate(req, res) {
 
           <p>For Client-Server, we’re assuming the Server has a public address that the Client can directly connect to.  With that in mind, we will be ignoring the Client’s ICE Candidates and only sending one of the Server’s to the Client.</p>
 
-          <p>First, we’ll implement <span class="mark-code">addIceCandidate()</span> in the client to pass the ICE Candidate to our Client PeerConnection.</p>
+          <p>First, we’ll implement <span class="mark-code">addIceCandidate()</span> in the client to pass the ICE Candidate to our Client PeerConnection. We are already assigning this as a callback in <span class="mark-code">getOffer()</span> in the Client code.</p>
 
           client.js
           <pre>
@@ -237,48 +275,61 @@ function addIceCandidate(candidate) {
   // 1. This checks for the server indicating it could not provide any
   //    ICE Candidates.
   if (candidate.candidate === '') {
-    return console.log('the server had no ICE Candidates')
+    return console.error('the server had no ICE Candidates')
   }
 
   // 2. Pass the ICE Candidate to the Client PeerConnection
   peerConnection.addIceCandidate(candidate)
 }</pre>
           
-          <p>Next, we need to backtrack to before the Offer/Answer are set on the Server’s PeerConnection, and add a callback that is called every time an ICE Candidate is ready.</p>
+          <p>Next, we'll implement <span class="mark-code">getIceCandidateHandler()</span> which is already being called at the end of <span class="mark-code">getOffer()</span> on the Server. It will provide a callback that is called every time an ICE Candidate is ready.</p>
           
           server.js
           <pre>
-function getOffer(req, res) {
-  // ... previous code here ...
-
-  peerConnection.onicecandidate = function(event) {
-    // 1. If the client isn’t waiting for a response, either we already
-    //    sent one, or something went wrong.
-    if (!client.iceCandidateResponse) {
-      return console.log('got candidate but no response')
-    }
-
+function getIceCandidateHandler(clientId, client) {
+  return function(event) {
     const candidate = event.candidate
 
-    // 2. Skip local candidates.  You can do the same for 192.168., etc.
+    // 1. Do nothing if a candidate one is already set
+    if (client.iceCandidate || !candidate) {
+      return
+    }
+
+    // 2. Skip candidates with certain addresses.  If your server is public, you
+    //    would want to skip private address, so you could add 192.168., etc.
     if (candidate.address.startsWith('10.')) {
-      return console.log('skipping local candidate')
+      return
     }
 
-    // 3. Skip candidates that aren't udp
-    If (candidate.protocol !== 'udp') {
-      return console.log('skipping non-udp candidate')
+    // 3. Skip candidates that aren't udp.  We only want unreliable, 
+    //    unordered connections.
+    if (candidate.protocol !== 'udp') {
+      return
     }
 
-    // 4. Send the ICE Candidate to the Client
-    client.iceCandidateResponse.end(JSON.stringify(candidate))
-    delete client.iceCandidateResponse
+    // 4. If the user is waiting for a response, send the ICE Candidate now
+    if (client.iceCandidateResponse) {
+      console.log(clientId, 'sending ICE candidate')
+      client.iceCandidateResponse.end(JSON.stringify(candidate))
+      delete client.iceCandidateResponse
+      return
+    }
+
+    // 5. Otherwise, save it for when they are ready for a response
+    console.log(clientId, 'sending ICE candidate')
+    client.iceCandidate = candidate
   }
 }</pre>
 
           <ul>
             <li>
-              For step 2, you could instead filter the candidates by a specific public address you know your server has.  I haven’t tested if the <span class="mark-code">ordered</span> and <span class="mark-code">maxRetransmits</span> settings will work with a tcp connection, but seems like udp would be required, and that’s what step 3 is for.
+              Normally you would want to send all the ICE Candidates generated to the other peer, but because we're setup in a Client/Server way, just one should be enough. In an actual application it may be best to send all the ICE Candidates anyway.
+            </li>
+            <li>
+              For step 2, you could instead filter the candidates by a specific public address you know your server has.
+            </li>
+            <li>
+              I haven’t tested if the <span class="mark-code">ordered</span> and <span class="mark-code">maxRetransmits</span> settings will work with a tcp connection, but seems like udp would be required, and that’s what step 3 is for.
             </li>
           </ul>
 
@@ -288,33 +339,55 @@ function getOffer(req, res) {
           <p>Setting up the DataChannel for sending messages between the Client and Server is the same as any other WebRTC setup.  Here the server will create the DataChannel and send 50 messages per second to the Client.</p>
 
           <p>We’ll start with the Client reacting to creation of the DataChannel and messages received through it.  This code gets added to <span class="mark-code">sendAnswer()</span> where we create our Client PeerConnection.</p>
+
+          <p>Most of the code in the <span class="mark-code">ondatachannel</span> callback is specific to our demo app, but you can see how to detect messages as lost or late.</p>
           
           client.js:
           <pre>
-function sendAnswer(offer) {
-  // ... previous code here ...
-
-  peerConnection.ondatachannel(function (event) {
+function setupDataChannel() {
+  let messagesOk = 0
+  let messagesLost = 0
+  let messagesLate = 0
+  let messagesOkElement = document.getElementById('ok')
+  let messagesLostElement = document.getElementById('lost')
+  let messagesLateElement = document.getElementById('late')
+  peerConnection.ondatachannel = function (event) {
     const dataChannel = event.channel
 
     let lastMessageId = 0
+    let firstMessage = true
     dataChannel.onmessage = function(event) {
       // Ideally this wouldn't be a string, but that's out of scope here.
-      const messageId = parseInt(event.data, 10)
+      const messageId = parseInt(event.data.split("\n")[0], 10)
 
       if (messageId &lt;= lastMessageId) {
         // This message is old. We can either skip it, or handle it
         // differently knowing it is old.
-        return
+        if (messageId &lt; lastMessageId) {
+          messagesLost--
+          messagesLate++
+        }
+      } else {
+        messagesOk++
       }
-      if (messageId &gt; lastMessageId + 1) {
-        // Some messages before this one are late or were lost. 
-        // If this happens a lot we may want to alert the user that the
-        // connection seems unstable.
+
+      if (messageId > lastMessageId + 1) {
+        if (firstMessage) {
+          firstMessage = false
+        } else {
+          // Some messages before this one were lost or may show up late. 
+          // If this happens a lot we may want to alert the user that the
+          // connection seems unstable.
+          messagesLost += messageId - lastMessageId - 1
+        }
       }
       lastMessageId = messageId
+
+      messagesOkElement.innerText = messagesOk
+      messagesLostElement.innerText = messagesLost
+      messagesLateElement.innerText = messagesLate
     }
-  })
+  }
 }</pre>
 
           <ul>
@@ -323,41 +396,61 @@ function sendAnswer(offer) {
             </li>
           </ul>
           
-          <p>Finally, we’ll have the server create the DataChannel and send the messages.</p>
+          <p>Finally, we’ll have the server create the DataChannel and send the messages. Part of this is implementing <span class="mark-code">createDataChannel()</span> called from <span class="mark-code">getOffer()</span> in the first section.</p>
           
           server.js:
           <pre>
-function getOffer(req, res) {
-  // ... previous code here ...
-
-  const dataChannel = peerConnection.createDataChannel('hello', {
+function createDataChannel(peerConnection) {
+  return peerConnection.createDataChannel('hello', {
     ordered: false,
     maxRetransmits: 0
   })
+}
 
-  dataChannel.onopen = function(event) {
-    let messageId = 1
-    setInterval(function() {
-      dataChannel.send(messageId++)
-    }, 20)
+// Build a random message with a set size. You can adjust the size
+// to simulate different applications.
+let message = "\n"
+while (message.length < 1000) {
+  message += String.fromCharCode(Math.round(Math.random()*256))
+}
+
+// DataChannel Loop
+let messageId = 1
+setInterval(function() {
+  const clientIds = Object.keys(clients)
+
+  for (const [id, client] of Object.entries(clients)) {
+    if (client.dataChannel.readyState === 'open') {
+      client.dataChannel.send(`${messageId}${message}`)
+    }
   }
-}</pre>
+
+  messageId++
+}, 20)</pre>
 
           <ul>
             <li>
               Here we see the configuration mentioned in the overview that prevents us from having to wait on delayed or lost messages.
             </li>
+            <li>
+              Our loop that attempts to send the messages starts as soon as the Server starts, but it won't actually try send anything until the first client connects.  If a client disconnects, its <span class="mark-code">readyState</span> is no longer open, and we'll stop sending it messages.
+            </li>
           </ul>
           
           <h2 class="title is-4">All Sorted Out</h2>
 
-          <p>Now we have a server that can connect to multiple browsers and send a high rate of messages without one out more messages delaying others. The primary use case for this is multiplayer game updates, but should work for any data with a high rate that doesn't rely on message order.</p>
+          <p>Now we have a server that can connect to multiple browsers and send a high rate of messages without one or more messages delaying others. The primary use case for this is multiplayer game updates, but should work for any data with a high rate that doesn't rely on message order or reliability.</p>
+
+          <p>
+            If you'd like to see and/or clone a complete implementation of this demo, you can find it here on GitLab: 
+            <br><a href="https://gitlab.com/MarkSort/udp-like-browser-networking">https://gitlab.com/MarkSort/udp-like-browser-networking</a>
+          </p>
           
           <p>This is just the groundwork and you'd want to look into improvements beyond it. These are just a few ideas for what might be next:</p>
 
           <ul>
-            <li>Connection error handling</li>
-            <li>Handle client disconnects and reconnect</li>
+            <li>On the Server, clean up disconnected clients</li>
+            <li>On the Client, detect disconnects and then reconnect</li>
             <li>Allow multiple and/or user ICE Candidates</li>
             <li>Binary message contents</li>
             <li>Different language for the server</li>
