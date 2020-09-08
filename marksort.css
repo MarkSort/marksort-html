@@ -1,13 +1,36 @@
+body {
+    color: #ccc;
+}
+
+.content h1 {
+    color: #dd0;
+}
+
+.content h2 {
+    color: #d60;
+}
+
+a {
+    color: #ff0;
+}
+
+a:hover {
+    color: #f80;
+}
+
 .mark-body {
-    background-color: #dbdbdb;
+    background-color: #222;
+}
+html, body, .mark-nav, .mark-navbar, .mark-navbar button.navbar-burger, .mark-navbar button.navbar-burger:focus {
+    background: #000;
 }
 
 .mark-nav {
-    background: #fff;
+    border-bottom: 2px solid #a40;
 }
 
-.mark-body, .mark-nav {
-    border-bottom: 2px solid #00f;
+.mark-body {
+    border-bottom: 2px solid #aa0;
 }
 
 .mark-navbar {
@@ -16,9 +39,8 @@
 }
 
 .mark-navbar button.navbar-burger, .mark-navbar button.navbar-burger:focus {
-    background: #fff;
     border: none;
-    color: #777;
+    color: #ccc;
     outline: none;
 }
 
@@ -28,21 +50,30 @@
     }
 }
 
+.navbar-item {
+    color: #ccc;
+}
+
+a.navbar-item:hover {
+    color: #fff;
+    background: #444;
+}
+
 .mark-block {
     border-radius: 10px;
     padding: 0 .75rem;
     margin-bottom: 1.5rem;
-    background: #fff;
+    background: #000;
 }
 
 a .mark-block {
-    color: #4a4a4a
+    color: #ccc;
 }
 
 .mark-block-img {
     width: 120px;
     height: 100%;
-    background: #fff;
+    background: #000;
     position: relative;
     max-height: 120px;
 }
@@ -66,9 +97,9 @@ a .mark-block {
 }
 
 .mark-article {
-    background: #fff;
-    border-top: 2px solid #f00;
-    border-bottom: 2px solid #f00;
+    background: #000;
+    border-top: 2px solid #a00;
+    border-bottom: 2px solid #a00;
     padding: 20px;
     margin-top: -20px;
 }
@@ -88,9 +119,16 @@ a .mark-block {
 
 .mark-article span.mark-code {
     font-family: 'Courier New', Courier, monospace;
-    background-color: #ffffbb;
+    background-color: #400;
     font-weight: 600;
     padding: 0 3px;
+}
+
+pre {
+    border-top: 1px solid #ff0;
+    border-bottom: 1px solid #f80;
+    background: #222;
+    color: #ddd;
 }
 
 .mark-about-social {
